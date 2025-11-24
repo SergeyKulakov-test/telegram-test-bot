@@ -7,12 +7,23 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 bot.use(session({
   defaultSession: () => ({
     category: '',
-    index: 0
+    index: 0,
+    questionOrder: [] // Добавляем массив для порядка вопросов
   })
 }));
 
 // Импортируем вопросы
 const questions = require('./data/questions.json');
+
+// Функция для перемешивания массива (алгоритм Фишера-Йетса)
+function shuffleArray(array) {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
 
 // Команда start
 bot.start((ctx) => {
@@ -36,8 +47,12 @@ bot.action(/category:(.*)/, async (ctx) => {
     return ctx.reply("В этой категории пока нет вопросов");
   }
 
+  // Создаем случайный порядок вопросов
+  const questionOrder = shuffleArray(questions[category].map((_, index) => index));
+  
   ctx.session.category = category;
   ctx.session.index = 0;
+  ctx.session.questionOrder = questionOrder;
 
   await sendQuestion(ctx);
 });
@@ -45,13 +60,15 @@ bot.action(/category:(.*)/, async (ctx) => {
 // Обработчик ответов
 bot.action(/answer:(\d+)/, async (ctx) => {
   const answerIndex = Number(ctx.match[1]);
-  const { category, index } = ctx.session;
+  const { category, index, questionOrder } = ctx.session;
 
-  if (!category || index === undefined) {
+  if (!category || index === undefined || !questionOrder) {
     return ctx.reply("Сессия не инициализирована. Начните заново с /start");
   }
 
-  const q = questions[category][index];
+  // Получаем текущий вопрос из перемешанного порядка
+  const currentQuestionIndex = questionOrder[index];
+  const q = questions[category][currentQuestionIndex];
   const correct = q.correct === answerIndex;
 
   let resultText = `❓ ${q.question}\n\n`;
@@ -81,16 +98,15 @@ bot.action(/answer:(\d+)/, async (ctx) => {
 
 // Следующий вопрос
 bot.action("next", async (ctx) => {
-  const { category } = ctx.session;
+  const { category, questionOrder } = ctx.session;
   
-  if (!category) {
+  if (!category || !questionOrder) {
     return ctx.reply("Сессия не инициализирована. Начните заново с /start");
   }
 
   ctx.session.index++;
 
-  const list = questions[category];
-  if (ctx.session.index >= list.length) {
+  if (ctx.session.index >= questionOrder.length) {
     return ctx.reply("🎉 Тест завершён! Напишите /start чтобы начать заново.");
   }
 
@@ -99,10 +115,13 @@ bot.action("next", async (ctx) => {
 
 // Функция отправки вопроса
 async function sendQuestion(ctx) {
-  const { category, index } = ctx.session;
-  const q = questions[category][index];
+  const { category, index, questionOrder } = ctx.session;
+  
+  // Получаем текущий вопрос из перемешанного порядка
+  const currentQuestionIndex = questionOrder[index];
+  const q = questions[category][currentQuestionIndex];
 
-  let questionText = `Вопрос ${index + 1}/${questions[category].length}\n❓ ${q.question}\n\n`;
+  let questionText = `Вопрос ${index + 1}/${questionOrder.length}\n❓ ${q.question}\n\n`;
   q.answers.forEach((answer, i) => {
     questionText += `${i + 1}. ${answer}\n`;
   });
