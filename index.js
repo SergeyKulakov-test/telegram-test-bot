@@ -1,21 +1,33 @@
 require('dotenv').config();
 const { Telegraf, Markup, session } = require('telegraf');
+const express = require('express');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Простой HTTP сервер для Render
+app.get('/', (req, res) => {
+  res.send('🤖 Telegram Test Bot is running!');
+});
+
+app.listen(PORT, () => {
+  console.log(`HTTP server running on port ${PORT}`);
+});
 
 // Базовая структура сессии
 bot.use(session({
   defaultSession: () => ({
     category: '',
     index: 0,
-    questionOrder: [] // Добавляем массив для порядка вопросов
+    questionOrder: []
   })
 }));
 
 // Импортируем вопросы
 const questions = require('./data/questions.json');
 
-// Функция для перемешивания массива (алгоритм Фишера-Йетса)
+// Функция для перемешивания массива
 function shuffleArray(array) {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -47,7 +59,6 @@ bot.action(/category:(.*)/, async (ctx) => {
     return ctx.reply("В этой категории пока нет вопросов");
   }
 
-  // Создаем случайный порядок вопросов
   const questionOrder = shuffleArray(questions[category].map((_, index) => index));
   
   ctx.session.category = category;
@@ -66,7 +77,6 @@ bot.action(/answer:(\d+)/, async (ctx) => {
     return ctx.reply("Сессия не инициализирована. Начните заново с /start");
   }
 
-  // Получаем текущий вопрос из перемешанного порядка
   const currentQuestionIndex = questionOrder[index];
   const q = questions[category][currentQuestionIndex];
   const correct = q.correct === answerIndex;
@@ -116,8 +126,6 @@ bot.action("next", async (ctx) => {
 // Функция отправки вопроса
 async function sendQuestion(ctx) {
   const { category, index, questionOrder } = ctx.session;
-  
-  // Получаем текущий вопрос из перемешанного порядка
   const currentQuestionIndex = questionOrder[index];
   const q = questions[category][currentQuestionIndex];
 
